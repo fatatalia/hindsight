@@ -250,8 +250,12 @@ export function createDshHooks(resolve: (agent: DshAgent) => Workspace | undefin
       // block is already in the history the model is about to be sent.
       const prompt = promptOf(decision.messages);
       if (!prompt) return decision;
-      await workspace.core.onPrompt(sessionId, prompt);
-      const injection = workspace.core.getInjection(sessionId);
+      // One-shot sessions (heartbeat / webhook) are disposable: loading external memory is
+      // pointless and costs an LLM reflect call per turn. Skip recall + injection for them.
+      const skipOnce =
+        sessionId.startsWith("heartbeat-") || sessionId.startsWith("webhook-");
+      if (!skipOnce) await workspace.core.onPrompt(sessionId, prompt);
+      const injection = skipOnce ? undefined : workspace.core.getInjection(sessionId);
       if (!injection) {
         diag(HARNESS, "inject_empty", { session: sessionId });
         return decision;
@@ -267,7 +271,10 @@ export function createDshHooks(resolve: (agent: DshAgent) => Workspace | undefin
       liveAgents.set(sessionId, agent);
       // The stop boundary is the only moment the completed exchange is readable, so this bypasses
       // the turn cadence exactly like the opencode idle path it shares (`onSessionIdle`).
-      await workspace.core.onSessionIdle(sessionId);
+      // One-shot sessions (heartbeat / webhook) are disposable: skip the write-back too.
+      if (!sessionId.startsWith("heartbeat-") && !sessionId.startsWith("webhook-")) {
+        await workspace.core.onSessionIdle(sessionId);
+      }
     },
 
     disposed({ agent }: { agent: DshAgent }): void {
