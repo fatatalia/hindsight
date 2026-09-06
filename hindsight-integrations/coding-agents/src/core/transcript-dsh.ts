@@ -2,7 +2,8 @@
  * DeepSeek Harness (dsh) transcript normalizer.
  *
  * dsh keeps a session as an append-only log of typed `SessionEvent`s rather than a chat array, and
- * a plugin reads that log straight off `agent.session.events` — so this is a pure function over
+ * a plugin reads that log straight off `agent.session.snapshotEvents()` (0.1.2-rc.1 起 `session.events`
+ * 为私有字段，须用快照方法) — so this is a pure function over
  * those events, like the opencode normalizer, not a file reader. The SAME event vocabulary is what
  * dsh persists to disk, so the backfill reader (core/history.ts) feeds this exact function.
  *

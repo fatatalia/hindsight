@@ -156,7 +156,7 @@ function workspaceFor(root: string): Workspace | undefined {
   // memory, so unlike opencode there is nothing to refetch over HTTP.
   core.setTranscriptSource(async (sessionId) => {
     const agent = liveAgents.get(sessionId);
-    return agent ? readDshEvents(agent.session.events) : [];
+    return agent ? readDshEvents(agent.session.snapshotEvents()) : [];
   });
   const workspace: Workspace = { core, root };
   workspaces.set(root, workspace);
