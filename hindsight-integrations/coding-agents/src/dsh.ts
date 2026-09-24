@@ -223,16 +223,17 @@ function promptOf(messages: readonly DshUserMessage[]): string {
  * Build the injected memory message.
  *
  * `form: 'recall'` is dsh's own vocabulary for retrieved context, so its UI renders the block as
- * recalled material rather than as something the user typed, and `plugin: 'hindsight'` names us in
- * the durable log. Neither is what keeps the block out of a write-back — transcript-dsh.ts drops
- * every plugin-sourced message, ours included.
+ * recalled material rather than as something the user typed, and `kind: 'plugin:hindsight'` names
+ * us in the durable log via the v4 producer-owned source shape (retired `kind: 'plugin'` syntax is
+ * refused by format v4 validation). Neither is what keeps the block out of a write-back —
+ * transcript-dsh.ts drops every non-user-sourced message, ours included.
  */
 function injectionMessage(text: string): DshUserMessage {
   return {
     id: randomUUID(),
     role: "user",
     content: [{ type: "text", text }],
-    source: { kind: "plugin", plugin: HINDSIGHT_PLUGIN, form: "recall" },
+    source: { kind: `plugin:${HINDSIGHT_PLUGIN}`, form: "recall" },
   };
 }
 
@@ -268,8 +269,12 @@ export function createDshHooks(resolve: (agent: DshAgent) => Workspace | undefin
       // block is already in the history the model is about to be sent.
       const prompt = promptOf(decision.messages);
       if (!prompt) return decision;
-      await workspace.core.onPrompt(sessionId, prompt);
-      const injection = workspace.core.getInjection(sessionId);
+      // One-shot sessions (heartbeat / webhook) are disposable: loading external memory is
+      // pointless and costs an LLM reflect call per turn. Skip recall + injection for them.
+      const skipOnce =
+        sessionId.startsWith("heartbeat-") || sessionId.startsWith("webhook-");
+      if (!skipOnce) await workspace.core.onPrompt(sessionId, prompt);
+      const injection = skipOnce ? undefined : workspace.core.getInjection(sessionId);
       if (!injection) {
         diag(HARNESS, "inject_empty", { session: sessionId });
         return decision;
@@ -285,7 +290,10 @@ export function createDshHooks(resolve: (agent: DshAgent) => Workspace | undefin
       liveAgents.set(sessionId, agent);
       // The stop boundary is the only moment the completed exchange is readable, so this bypasses
       // the turn cadence exactly like the opencode idle path it shares (`onSessionIdle`).
-      await workspace.core.onSessionIdle(sessionId);
+      // One-shot sessions (heartbeat / webhook) are disposable: skip the write-back too.
+      if (!sessionId.startsWith("heartbeat-") && !sessionId.startsWith("webhook-")) {
+        await workspace.core.onSessionIdle(sessionId);
+      }
     },
 
     disposed({ agent }: { agent: DshAgent }): void {

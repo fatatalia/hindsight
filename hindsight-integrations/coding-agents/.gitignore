@@ -1,2 +1,5 @@
 node_modules/
 dist/
+
+# 本地救援备份（不提交）
+*.bak-*

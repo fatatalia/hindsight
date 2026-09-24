@@ -223,6 +223,16 @@ recalled memory, the knowledge preamble, the `hindsight_*` tools — is unaffect
 published-package route, `dsh plugin --profile web add @vectorize-io/hindsight-coding-agents` works
 too: the package ships the profile patch layer, so nothing else needs editing.
 
+**dsh session format v4 note (dsh ≥ 0.1.7).** dsh validates every message source against a
+*producer-owned* kind. The retired shape `{ kind: "plugin", plugin: "hindsight" }` is rejected
+outright — `SessionFormatError: format v4 message requires a producer-owned source kind` — and
+because the throw happens during session admission, it takes down **every** session, not just
+recall ones. Recall injections therefore emit `{ kind: "plugin:hindsight", form: "recall" }`:
+`plugin:<name>` is dsh's fallback naming for third-party producers absent from its
+renamed/same-name registries, and the `plugin` field must be folded into `kind`. Note that the
+v3→v4 migration rewrites *historical* rows, but newly written messages hit native validation
+with no migration path — so the adapter itself must emit the current shape.
+
 Uninstall the same way: `npx @vectorize-io/hindsight-coding-agents uninstall claude-code` (or `uninstall all`).
 
 **Devin CLI needs Node 22.5 or newer.** Its hooks pass only a session id — the conversation itself
